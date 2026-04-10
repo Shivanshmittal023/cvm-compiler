@@ -1,0 +1,38 @@
+# Mac OS OS-specific files
+**/.DS_Store
+**/.AppleDouble
+**/.LSOverride
+
+# Build artifacts & directories
+**/build/
+**/bin/
+**/obj/
+**/out/
+
+# Compiled Object files and Executables
+**/*.o
+**/*.out
+**/*.exe
+**/*.dylib
+**/*.a
+**/*.app
+**/mycc
+
+# CMake generated files
+**/CMakeCache.txt
+**/CMakeFiles/
+**/Makefile
+**/cmake_install.cmake
+**/install_manifest.txt
+**/compile_commands.json
+**/*.cmake
+
+# IDEs and Editor metadata
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+
+# Testing / Logging
+**/tests/output/
+**/*.log
