@@ -39,7 +39,9 @@ enum class TokenType {
     SLASH_EQUALS,   // /=
     PERCENT,        // %
 
+    AMPERSAND,           // &   (address-of / bitwise AND)
     AMPERSAND_AMPERSAND, // &&
+    PIPE,                // |   (bitwise OR)
     PIPE_PIPE,           // ||
     
     // Symbols
@@ -62,6 +64,7 @@ enum class TokenType {
 struct Token {
     TokenType type;
     std::string lexeme;
+    std::string filename;  // source file this token came from
     int line;
     int column;
 };

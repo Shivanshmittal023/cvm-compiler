@@ -1,7 +1,37 @@
 #include "Lexer.h"
 #include <cctype>
+#include <iostream>
+#include <unordered_map>
 
-Lexer::Lexer(std::string source) : source(std::move(source)) {}
+// ────────────────────────────────────────────────────────────────
+// O(1) keyword lookup instead of the if/else chain
+// ────────────────────────────────────────────────────────────────
+static const std::unordered_map<std::string, TokenType> keywords = {
+    {"int",       TokenType::INT},
+    {"float",     TokenType::FLOAT},
+    {"double",    TokenType::DOUBLE},
+    {"char",      TokenType::CHAR},
+    {"void",      TokenType::VOID},
+    {"bool",      TokenType::BOOL},
+    {"return",    TokenType::RETURN},
+    {"if",        TokenType::IF},
+    {"else",      TokenType::ELSE},
+    {"while",     TokenType::WHILE},
+    {"for",       TokenType::FOR},
+    {"do",        TokenType::DO},
+    {"class",     TokenType::CLASS},
+    {"public",    TokenType::PUBLIC},
+    {"private",   TokenType::PRIVATE},
+    {"protected", TokenType::PROTECTED},
+    {"true",      TokenType::TRUE_LITERAL},
+    {"false",     TokenType::FALSE_LITERAL},
+};
+
+// ────────────────────────────────────────────────────────────────
+// Constructor & helpers
+// ────────────────────────────────────────────────────────────────
+Lexer::Lexer(std::string source, std::string filename)
+    : source(std::move(source)), filename(std::move(filename)) {}
 
 char Lexer::peek() const {
     if (isAtEnd()) return '\0';
@@ -36,6 +66,12 @@ bool Lexer::isAtEnd() const {
     return position >= source.length();
 }
 
+void Lexer::reportError(int errLine, int errCol, const std::string& message) {
+    hadError = true;
+    std::cerr << filename << ":" << errLine << ":" << errCol
+              << ": error: " << message << "\n";
+}
+
 void Lexer::skipWhitespaceAndComments() {
     while (!isAtEnd()) {
         char c = peek();
@@ -46,6 +82,8 @@ void Lexer::skipWhitespaceAndComments() {
                 // A single-line comment goes until the end of the line.
                 while (!isAtEnd() && peek() != '\n') advance();
             } else if (peekNext() == '*') {
+                int commentLine = line;
+                int commentCol = column;
                 // Multi-line comment
                 advance(); // consume '/'
                 advance(); // consume '*'
@@ -57,6 +95,13 @@ void Lexer::skipWhitespaceAndComments() {
                     }
                     advance();
                 }
+                // Check for unterminated block comment
+                if (isAtEnd() && !(source.length() >= 2 &&
+                    source[source.length() - 2] == '*' &&
+                    source[source.length() - 1] == '/')) {
+                    reportError(commentLine, commentCol,
+                                "unterminated block comment");
+                }
             } else {
                 break;
             }
@@ -66,6 +111,9 @@ void Lexer::skipWhitespaceAndComments() {
     }
 }
 
+// ────────────────────────────────────────────────────────────────
+// Main tokenize loop
+// ────────────────────────────────────────────────────────────────
 std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
 
@@ -77,34 +125,21 @@ std::vector<Token> Lexer::tokenize() {
         int startLine = line;
         char c = peek();
 
+        // ── Identifiers & Keywords ──────────────────────────────
         if (std::isalpha(c) || c == '_') {
             std::string lexeme;
             while (std::isalnum(peek()) || peek() == '_') {
                 lexeme += advance();
             }
-            TokenType type = TokenType::IDENTIFIER;
 
-            if (lexeme == "int") type = TokenType::INT;
-            else if (lexeme == "float") type = TokenType::FLOAT;
-            else if (lexeme == "double") type = TokenType::DOUBLE;
-            else if (lexeme == "char") type = TokenType::CHAR;
-            else if (lexeme == "void") type = TokenType::VOID;
-            else if (lexeme == "bool") type = TokenType::BOOL;
-            else if (lexeme == "return") type = TokenType::RETURN;
-            else if (lexeme == "if") type = TokenType::IF;
-            else if (lexeme == "else") type = TokenType::ELSE;
-            else if (lexeme == "while") type = TokenType::WHILE;
-            else if (lexeme == "for") type = TokenType::FOR;
-            else if (lexeme == "do") type = TokenType::DO;
-            else if (lexeme == "class") type = TokenType::CLASS;
-            else if (lexeme == "public") type = TokenType::PUBLIC;
-            else if (lexeme == "private") type = TokenType::PRIVATE;
-            else if (lexeme == "protected") type = TokenType::PROTECTED;
-            else if (lexeme == "true") type = TokenType::TRUE_LITERAL;
-            else if (lexeme == "false") type = TokenType::FALSE_LITERAL;
+            // O(1) keyword lookup
+            auto it = keywords.find(lexeme);
+            TokenType type = (it != keywords.end()) ? it->second
+                                                    : TokenType::IDENTIFIER;
 
-            tokens.push_back({type, lexeme, startLine, startColumn});
+            tokens.push_back({type, lexeme, filename, startLine, startColumn});
         }
+        // ── Number literals ─────────────────────────────────────
         else if (std::isdigit(c)) {
             std::string lexeme;
             bool isFloat = false;
@@ -118,32 +153,77 @@ std::vector<Token> Lexer::tokenize() {
                     lexeme += advance();
                 }
             }
-            tokens.push_back({isFloat ? TokenType::NUMBER_FLOAT : TokenType::NUMBER_INT, lexeme, startLine, startColumn});
+            tokens.push_back({isFloat ? TokenType::NUMBER_FLOAT
+                                      : TokenType::NUMBER_INT,
+                              lexeme, filename, startLine, startColumn});
         }
+        // ── String literals (with proper escape decoding) ───────
         else if (c == '"') {
             std::string lexeme;
             advance(); // consume leading quote
             while (!isAtEnd() && peek() != '"') {
                 if (peek() == '\\') {
+                    advance(); // consume '\'
+                    if (isAtEnd()) break;
+                    char escaped = advance();
+                    switch (escaped) {
+                        case 'n':  lexeme += '\n'; break;
+                        case 't':  lexeme += '\t'; break;
+                        case 'r':  lexeme += '\r'; break;
+                        case '\\': lexeme += '\\'; break;
+                        case '"':  lexeme += '"';  break;
+                        case '0':  lexeme += '\0'; break;
+                        default:   lexeme += escaped; break;
+                    }
+                } else {
                     lexeme += advance();
                 }
-                if (!isAtEnd()) lexeme += advance();
             }
-            if (!isAtEnd()) advance(); // consume trailing quote
-            tokens.push_back({TokenType::STRING_LITERAL, lexeme, startLine, startColumn});
+            if (isAtEnd()) {
+                reportError(startLine, startColumn,
+                            "unterminated string literal");
+                tokens.push_back({TokenType::UNKNOWN, lexeme, filename,
+                                  startLine, startColumn});
+            } else {
+                advance(); // consume trailing quote
+                tokens.push_back({TokenType::STRING_LITERAL, lexeme, filename,
+                                  startLine, startColumn});
+            }
         }
+        // ── Char literals (with proper escape decoding) ─────────
         else if (c == '\'') {
             std::string lexeme;
             advance(); // consume leading quote
             while (!isAtEnd() && peek() != '\'') {
                 if (peek() == '\\') {
+                    advance(); // consume '\'
+                    if (isAtEnd()) break;
+                    char escaped = advance();
+                    switch (escaped) {
+                        case 'n':  lexeme += '\n'; break;
+                        case 't':  lexeme += '\t'; break;
+                        case 'r':  lexeme += '\r'; break;
+                        case '\\': lexeme += '\\'; break;
+                        case '\'': lexeme += '\''; break;
+                        case '0':  lexeme += '\0'; break;
+                        default:   lexeme += escaped; break;
+                    }
+                } else {
                     lexeme += advance();
                 }
-                if (!isAtEnd()) lexeme += advance();
             }
-            if (!isAtEnd()) advance(); // consume trailing quote
-            tokens.push_back({TokenType::CHAR_LITERAL, lexeme, startLine, startColumn});
+            if (isAtEnd()) {
+                reportError(startLine, startColumn,
+                            "unterminated character literal");
+                tokens.push_back({TokenType::UNKNOWN, lexeme, filename,
+                                  startLine, startColumn});
+            } else {
+                advance(); // consume trailing quote
+                tokens.push_back({TokenType::CHAR_LITERAL, lexeme, filename,
+                                  startLine, startColumn});
+            }
         }
+        // ── Operators & symbols ─────────────────────────────────
         else {
             advance(); // consume the symbol
             TokenType type = TokenType::UNKNOWN;
@@ -188,9 +268,11 @@ std::vector<Token> Lexer::tokenize() {
                     break;
                 case '&':
                     if (match('&')) { type = TokenType::AMPERSAND_AMPERSAND; lexeme = "&&"; }
+                    else { type = TokenType::AMPERSAND; }
                     break;
                 case '|':
                     if (match('|')) { type = TokenType::PIPE_PIPE; lexeme = "||"; }
+                    else { type = TokenType::PIPE; }
                     break;
                 case '%': type = TokenType::PERCENT; break;
                 case ';': type = TokenType::SEMICOLON; break;
@@ -203,11 +285,15 @@ std::vector<Token> Lexer::tokenize() {
                 case '}': type = TokenType::RBRACE; break;
                 case '[': type = TokenType::LBRACKET; break;
                 case ']': type = TokenType::RBRACKET; break;
+                default:
+                    reportError(startLine, startColumn,
+                                "unexpected character '" + std::string(1, c) + "'");
+                    break;
             }
-            tokens.push_back({type, lexeme, startLine, startColumn});
+            tokens.push_back({type, lexeme, filename, startLine, startColumn});
         }
     }
     
-    tokens.push_back({TokenType::EOF_TOK, "EOF", line, column});
+    tokens.push_back({TokenType::EOF_TOK, "EOF", filename, line, column});
     return tokens;
 }

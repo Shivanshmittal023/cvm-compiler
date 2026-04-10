@@ -90,8 +90,12 @@ std::string tokenTypeToString(TokenType type) {
     return "SLASH_EQUALS";
   case TokenType::PERCENT:
     return "PERCENT";
+  case TokenType::AMPERSAND:
+    return "AMPERSAND";
   case TokenType::AMPERSAND_AMPERSAND:
     return "AMPERSAND_AMPERSAND";
+  case TokenType::PIPE:
+    return "PIPE";
   case TokenType::PIPE_PIPE:
     return "PIPE_PIPE";
   case TokenType::SEMICOLON:
