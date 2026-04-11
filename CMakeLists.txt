@@ -14,4 +14,5 @@ add_executable(mycc
     src/Token.cpp
     src/Lexer.cpp
     src/AST.cpp
+    src/Parser.cpp
 )

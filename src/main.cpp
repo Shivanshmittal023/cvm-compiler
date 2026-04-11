@@ -1,41 +1,70 @@
-#include "AST.h"
 #include "Lexer.h"
+#include "Parser.h"
+#include <fstream>
 #include <iostream>
-#include <memory>
+#include <sstream>
+
+int main(int argc, char* argv[]) {
+    std::string source;
+    std::string filename;
+
+    if (argc >= 2) {
+        // ── Read from file ──────────────────────────────────────
+        filename = argv[1];
+        std::ifstream file(filename);
+        if (!file.is_open()) {
+            std::cerr << "error: could not open file '" << filename << "'\n";
+            return 1;
+        }
+        std::stringstream ss;
+        ss << file.rdbuf();
+        source = ss.str();
+    } else {
+        // ── Built-in demo ───────────────────────────────────────
+        filename = "demo.cpp";
+        source = R"(
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
 
 int main() {
-  std::cout << "Testing MASSIVE Production AST Framework...\n\n";
+    int result = factorial(5);
+    int sum = 0;
+    for (int i = 0; i < 10; i++) {
+        sum = sum + i;
+    }
+    return 0;
+}
+)";
+        std::cout << "── No input file provided, using built-in demo ──\n\n";
+    }
 
-  // We are manually building the exact AST for this highly complex C++ snippet:
-  // int main() {
-  //    return 2 + 3 * 4;
-  // }
+    // ── Phase 1, Step 1: Lexing ─────────────────────────────────
+    Lexer lexer(source, filename);
+    auto tokens = lexer.tokenize();
 
-  auto num3 = std::make_unique<NumberExpr>(static_cast<int64_t>(3));
-  auto num4 = std::make_unique<NumberExpr>(static_cast<int64_t>(4));
-  auto mulNode =
-      std::make_unique<BinaryExpr>("*", std::move(num3), std::move(num4));
+    std::cout << "=== TOKENS ===\n";
+    for (const auto& tok : tokens) {
+        std::cout << "  " << tok.filename << ":" << tok.line << ":" << tok.column
+                  << "  " << tokenTypeToString(tok.type)
+                  << "  '" << tok.lexeme << "'\n";
+    }
+    std::cout << "\n";
 
-  auto num2 = std::make_unique<NumberExpr>(static_cast<int64_t>(2));
-  auto addNode =
-      std::make_unique<BinaryExpr>("+", std::move(num2), std::move(mulNode));
+    // ── Phase 1, Step 3: Parsing ────────────────────────────────
+    Parser parser(tokens);
+    auto program = parser.parse();
 
-  auto returnNode = std::make_unique<ReturnStmt>(std::move(addNode));
+    if (parser.hadError()) {
+        std::cerr << "\nParsing failed with errors.\n";
+        return 1;
+    }
 
-  std::vector<std::unique_ptr<Stmt>> blockStmts;
-  blockStmts.push_back(std::move(returnNode));
-  auto body = std::make_unique<BlockStmt>(std::move(blockStmts));
+    std::cout << "=== AST ===\n";
+    std::cout << program->dump() << std::endl;
 
-  std::vector<std::pair<std::string, std::string>> params; // Empty parameters
-  auto mainFunc = std::make_unique<FunctionDecl>(
-      "int", "main", std::move(params), std::move(body));
-
-  std::vector<std::unique_ptr<Stmt>> fileStatements;
-  fileStatements.push_back(std::move(mainFunc));
-
-  auto programNode = std::make_unique<Program>(std::move(fileStatements));
-
-  std::cout << programNode->dump() << std::endl;
-
-  return 0;
+    return 0;
 }
