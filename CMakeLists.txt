@@ -15,4 +15,27 @@ add_executable(mycc
     src/Lexer.cpp
     src/AST.cpp
     src/Parser.cpp
+    src/Opcode.cpp
+    src/Chunk.cpp
+    src/Compiler.cpp
+    src/VM.cpp
+)
+
+# Test executable for bytecode infrastructure
+add_executable(test_bytecode
+    tests/test_bytecode.cpp
+    src/Opcode.cpp
+    src/Chunk.cpp
+)
+
+# Test executable for compiler
+add_executable(test_compiler
+    tests/test_compiler.cpp
+    src/Token.cpp
+    src/Lexer.cpp
+    src/AST.cpp
+    src/Parser.cpp
+    src/Opcode.cpp
+    src/Chunk.cpp
+    src/Compiler.cpp
 )
